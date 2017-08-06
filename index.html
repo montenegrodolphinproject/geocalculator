@@ -3,7 +3,7 @@
 <script
 src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.11.0/xlsx.full.min.js"
 integrity="sha256-CGml4Grf/JC4CS0k/ZoDcgeaKk4TAmS0uTgjThvW5DA="
-crossorigin="anonymous" > </script>
+crossorigin="anonymous"></script>
 <script src="https://fastcdn.org/FileSaver.js/1.1.20151003/FileSaver.min.js"></script>
 <script type="text/javascript" src="//rawgit.com/eligrey/Blob.js/master/Blob.js"></script>
 </head>
@@ -13,126 +13,8 @@ crossorigin="anonymous" > </script>
 <div id="sheet">
 </div>
 
-<script>
-function LatLon(lat, lon) {
-  // allow instantiation without 'new'
-  if (!(this instanceof LatLon)) return new LatLon(lat, lon);
-
-  this.lat = Number(lat);
-  this.lon = Number(lon);
-}
-
-LatLon.prototype.destinationPoint = function(distance, angle, radius) {
-  radius = radius === undefined ? 6371e3 : Number(radius);
-  const toDegrees = num => num * 180 / Math.PI;
-  const toRadians = num => num * Math.PI / 180;
-
-  // sinφ2 = sinφ1⋅cosδ + cosφ1⋅sinδ⋅cosθ
-  // tanΔλ = sinθ⋅sinδ⋅cosφ1 / cosδ−sinφ1⋅sinφ2
-  // see http://williams.best.vwh.net/avform.htm#LL
-
-  var angularDistance = Number(distance) / radius; // angular distance in radians
-  var bearing = toRadians(Number(angle));
-
-  var φ1 = toRadians(this.lat);
-  var λ1 = toRadians(this.lon);
-
-  var sinLat = Math.sin(φ1),
-    cosLat = Math.cos(φ1);
-  var sinDist = Math.sin(angularDistance),
-    cosDist = Math.cos(angularDistance);
-  var sinBearing = Math.sin(bearing),
-    cosBearing = Math.cos(bearing);
-
-  var sinLat2 = sinLat * cosDist + cosLat * sinDist * cosBearing;
-  console.log(sinLat2);
-  var φ2 = Math.asin(sinLat2);
-
-  console.log(φ2);
-  // var y = sinBearing * sinDist * cosLat;
-  // var x = cosDist - sinLat * sinLat2;
-  var λ2 =
-    λ1 + Math.atan2(sinBearing * sinDist * cosLat, cosDist - sinLat * sinLat2);
-
-  return new LatLon(toDegrees(φ2), (toDegrees(λ2) + 540) % 360 - 180); // normalise to −180..+180°
-};
-
-/* processing array buffers, only required for readAsArrayBuffer */
-function fixdata(data) {
-  var o = '',
-    l = 0,
-    w = 10240;
-  for (; l < data.byteLength / w; ++l)
-    o += String.fromCharCode.apply(
-      null,
-      new Uint8Array(data.slice(l * w, l * w + w)),
-    );
-  o += String.fromCharCode.apply(null, new Uint8Array(data.slice(l * w)));
-  return o;
-}
-
-var rABS = true; // true: readAsBinaryString ; false: readAsArrayBuffer
-
-/* fixdata and rABS are defined in the drag and drop example */
-function handleFile(e) {
-  var files = e.target.files;
-  var i, f;
-  for (i = 0; i != files.length; ++i) {
-    f = files[i];
-    var reader = new FileReader();
-    var name = f.name;
-    reader.onload = function(e) {
-      var data = e.target.result;
-
-      var workbook;
-      if (rABS) {
-        /* if binary string, read with type 'binary' */
-        window.x = workbook = XLSX.read(data, { type: 'binary' });
-      } else {
-        /* if array buffer, convert to base64 */
-        var arr = fixdata(data);
-        window.x = workbook = XLSX.read(btoa(arr), { type: 'base64' });
-      }
-
-      /* Get worksheet */
-      var worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      var json = XLSX.utils.sheet_to_json(worksheet);
-      console.log(json);
-      var newJson = json.map(row => {
-        const lat = Number(row['LATITUDE']);
-        const lon = Number(row['LONGITUDE']);
-        const location = LatLon(lat, lon);
-
-        return {
-          ...row,
-          ...location.destinationPoint(
-            row['Distance From Boat'],
-            row['Angle From Boat'],
-          ),
-        };
-      });
-
-      saveAs(
-        new Blob(
-          XLSX.write(XLSX.utils.json_to_sheet(newJson), {
-            bookType: 'xlsx',
-            bookSST: true,
-            type: 'binary',
-          }),
-          {
-            type: 'application/octet-stream',
-          },
-        ),
-        'test.xlsx',
-      );
-    };
-    reader.readAsBinaryString(f);
-  }
-}
-document.getElementById('upload').addEventListener('change', handleFile, false);
-</script>
+<script src="./geolocations.js" type="text/javascript"></script>
 </body>
-
 
 
 </html>
