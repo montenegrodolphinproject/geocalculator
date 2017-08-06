@@ -47,6 +47,20 @@ LatLon.prototype.destinationPoint = function(distance, angle, radius) {
   return new LatLon(toDegrees(φ2), (toDegrees(λ2) + 540) % 360 - 180); // normalise to −180..+180°
 };
 
+// print as html
+function to_html(workbook) {
+  document.getElementById('htmlout').innerHTML = '';
+  var result = [];
+  workbook.SheetNames.forEach(function(sheetName) {
+    var htmlstr = XLSX.write(workbook, {
+      sheet: sheetName,
+      type: 'binary',
+      bookType: 'html',
+    });
+    document.getElementById('htmlout').innerHTML += htmlstr;
+  });
+}
+
 /* processing array buffers, only required for readAsArrayBuffer */
 function fixdata(data) {
   var o = '',
@@ -109,6 +123,9 @@ function handleFile(e) {
       workbook.Sheets[workbook.SheetNames[0]] = XLSX.utils.json_to_sheet(
         newJson,
       );
+      to_html(workbook);
+
+      return;
 
       var wopts = { bookType: 'xlsx', bookSST: false, type: 'binary' };
 
