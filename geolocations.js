@@ -49,7 +49,8 @@ LatLon.prototype.destinationPoint = function(distance, angle, radius) {
 
 // print as html
 function to_html(workbook) {
-  document.getElementById('htmlout').innerHTML = '';
+  var el = document.querySelector('.content');
+  el.innerHTML = '';
   var result = [];
   workbook.SheetNames.forEach(function(sheetName) {
     var htmlstr = XLSX.write(workbook, {
@@ -57,7 +58,7 @@ function to_html(workbook) {
       type: 'binary',
       bookType: 'html',
     });
-    document.getElementById('htmlout').innerHTML += htmlstr;
+    el.innerHTML += htmlstr;
   });
 }
 
@@ -75,15 +76,76 @@ function fixdata(data) {
   return o;
 }
 
+function s2ab(s) {
+  var buf = new ArrayBuffer(s.length);
+  var view = new Uint8Array(buf);
+  for (var i = 0; i != s.length; ++i) view[i] = s.charCodeAt(i) & 0xff;
+  return buf;
+}
 var rABS = true; // true: readAsBinaryString ; false: readAsArrayBuffer
 
-var searchForKey = (row, str) => {
-  var k = Object.keys(row).filter(k => {
+function searchForKey(row, str) {
+  var k = Object.keys(row).filter(function(k) {
     if (k.toLowerCase().indexOf(str) > -1) return k;
   })[0];
   return row[k];
-};
-/* fixdata and rABS are defined in the drag and drop example */
+}
+
+function calculateAndEnrichData(rows) {
+  return rows.map(function(row) {
+    const lat = Number(searchForKey(row, 'latitude'));
+    const lon = Number(searchForKey(row, 'longitude'));
+    const location = LatLon(lat, lon);
+
+    return {
+      ...row,
+      ...location.destinationPoint(
+        searchForKey(row, 'distance'),
+        searchForKey(row, 'angle'),
+      ),
+    };
+  });
+}
+
+function export_to_excel(type, wb) {
+  var wb = window.WORKBOOK;
+  var wbout = XLSX.write(wb.wb, {
+    bookType: type,
+    bookSST: true,
+    type: 'binary',
+  });
+  try {
+    saveAs(
+      new Blob([s2ab(wbout)], { type: 'application/octet-stream' }),
+      `${new Date().getTime()}_${wb.name}`,
+    );
+  } catch (e) {
+    if (typeof console != 'undefined') console.log(e, wbout);
+  }
+  return wbout;
+}
+
+function doit(type) {
+  return export_to_excel(type || 'xlsx', window.WORKBOOK);
+}
+
+function process_wb(wb, name) {
+  /* Get worksheet */
+  var worksheet = wb.Sheets[wb.SheetNames[0]];
+  /* Get json */
+  var json = XLSX.utils.sheet_to_json(worksheet);
+  var enrichedJson = calculateAndEnrichData(json);
+  /* replace wokbook sheetdata with enriched version */
+  wb.Sheets[wb.SheetNames[0]] = XLSX.utils.json_to_sheet(enrichedJson);
+  /* publish workbook globally to download later*/
+  window.WORKBOOK = {
+    name: name,
+    wb: wb,
+  };
+  /* print as html */
+  to_html(wb);
+}
+
 function handleFile(e) {
   var files = e.target.files;
   var i, f;
@@ -97,54 +159,61 @@ function handleFile(e) {
       var workbook;
       if (rABS) {
         /* if binary string, read with type 'binary' */
-        window.x = workbook = XLSX.read(data, { type: 'binary' });
+        workbook = XLSX.read(data, { type: 'binary' });
       } else {
         /* if array buffer, convert to base64 */
         var arr = fixdata(data);
-        window.x = workbook = XLSX.read(btoa(arr), { type: 'base64' });
+        workbook = XLSX.read(btoa(arr), { type: 'base64' });
       }
-
-      /* Get worksheet */
-      var worksheet = workbook.Sheets[workbook.SheetNames[0]];
-      var newJson = XLSX.utils.sheet_to_json(worksheet).map(row => {
-        const lat = Number(searchForKey(row, 'latitude'));
-        const lon = Number(searchForKey(row, 'longitude'));
-        const location = LatLon(lat, lon);
-
-        return {
-          ...row,
-          ...location.destinationPoint(
-            searchForKey(row, 'distance'),
-            searchForKey(row, 'angle'),
-          ),
-        };
-      });
-
-      workbook.Sheets[workbook.SheetNames[0]] = XLSX.utils.json_to_sheet(
-        newJson,
-      );
-      to_html(workbook);
-
-      return;
-
-      var wopts = { bookType: 'xlsx', bookSST: false, type: 'binary' };
-
-      var wbout = XLSX.write(workbook, wopts);
-
-      function s2ab(s) {
-        var buf = new ArrayBuffer(s.length);
-        var view = new Uint8Array(buf);
-        for (var i = 0; i != s.length; ++i) view[i] = s.charCodeAt(i) & 0xff;
-        return buf;
-      }
-
-      /* the saveAs call downloads a file on the local machine */
-      saveAs(
-        new Blob([s2ab(wbout)], { type: 'application/octet-stream' }),
-        `${new Date().getTime()}_${name}`,
-      );
+      process_wb(workbook, name);
     };
     reader.readAsBinaryString(f);
   }
 }
-document.getElementById('upload').addEventListener('change', handleFile, false);
+
+var uploadButton = document.getElementById('file-1-input');
+uploadButton.addEventListener('change', handleFile, false);
+
+var use_worker = false;
+var drop = document.getElementById('drop');
+function handleDrop(e) {
+  e.stopPropagation();
+  e.preventDefault();
+  var files = e.dataTransfer.files;
+  var f = files[0];
+  {
+    var reader = new FileReader();
+    var name = f.name;
+    reader.onload = function(e) {
+      if (typeof console !== 'undefined')
+        console.log('onload', new Date(), rABS, use_worker);
+      var data = e.target.result;
+      if (use_worker) {
+        xw(data, process_wb);
+      } else {
+        var wb;
+        if (rABS) {
+          wb = XLSX.read(data, { type: 'binary' });
+        } else {
+          var arr = fixdata(data);
+          wb = XLSX.read(btoa(arr), { type: 'base64' });
+        }
+        process_wb(wb, name);
+      }
+    };
+    if (rABS) reader.readAsBinaryString(f);
+    else reader.readAsArrayBuffer(f);
+  }
+}
+
+function handleDragover(e) {
+  e.stopPropagation();
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'copy';
+}
+
+if (drop.addEventListener) {
+  drop.addEventListener('dragenter', handleDragover, false);
+  drop.addEventListener('dragover', handleDragover, false);
+  drop.addEventListener('drop', handleDrop, false);
+}
