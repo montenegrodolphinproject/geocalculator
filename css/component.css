@@ -93,12 +93,31 @@ table td {
   background-color: transparent;
 }
 
-table tr:nth-child(odd) {
+.table table tr:nth-child(odd) {
   background-color: #f2f2f2;
 }
-table tr:nth-child(1) td {
+.table table tr:nth-child(1) td {
   font-weight: bold;
   color: #fff;
   text-transform: uppercase;
   background-color: #384b54;
+}
+.table table tr:hover {
+  background-color: #c0cdd4;
+  cursor: pointer;
+}
+
+.box {
+  background-color: #7ca4ba;
+  padding: 2.25rem 0.75rem;
+}
+
+.box + .box {
+  margin-top: 2.5rem;
+}
+
+.box.dashed {
+  border-style: dashed;
+  border-width: 3px;
+  text-align: center;
 }

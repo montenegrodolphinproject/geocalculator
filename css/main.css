@@ -71,18 +71,3 @@ a:focus {
   margin: 0 auto;
   padding: 0 0 3em 0;
 }
-
-.box {
-  background-color: #7ca4ba;
-  padding: 6.25rem 1.25rem;
-}
-
-.box + .box {
-  margin-top: 2.5rem;
-}
-
-.box.dashed {
-  border-style: dashed;
-  border-width: 3px;
-  text-align: center;
-}

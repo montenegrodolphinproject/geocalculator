@@ -6,6 +6,8 @@ function LatLon(lat, lon) {
   this.lon = Number(lon);
 }
 
+// http://www.movable-type.co.uk/scripts/latlong.html
+
 LatLon.prototype.destinationPoint = function(distance, angle, radius) {
   radius = radius === undefined ? 6371e3 : Number(radius);
   const toDegrees = num => num * 180 / Math.PI;
@@ -46,20 +48,51 @@ LatLon.prototype.destinationPoint = function(distance, angle, radius) {
 
   return new LatLon(toDegrees(φ2), (toDegrees(λ2) + 540) % 360 - 180); // normalise to −180..+180°
 };
+function stringToNumber(str) {
+  return Number(str.match(/\d+/)[0]);
+}
 
+function getMapUrlById(id) {
+  var data = WORKBOOK.json[id];
+
+  return (
+    '/map?from=' +
+    searchForKey(data, 'latitude') +
+    ',' +
+    searchForKey(data, 'longitude') +
+    '&to=' +
+    data['lat'] +
+    ',' +
+    data['lon']
+  );
+}
 // print as html
 function to_html(workbook) {
   var el = document.querySelector('.content');
   el.innerHTML = '';
   var result = [];
   workbook.SheetNames.forEach(function(sheetName) {
-    var htmlstr = XLSX.write(workbook, {
-      sheet: sheetName,
-      type: 'binary',
-      bookType: 'html',
-    });
-    el.innerHTML += htmlstr;
+    try {
+      var htmlstr = XLSX.utils.sheet_to_html(workbook.Sheets[sheetName], {
+        header: '<div class="table">',
+        footer: '</div>',
+      });
+      el.innerHTML += htmlstr;
+    } catch (e) {
+      console && console.error(e);
+    }
   });
+
+  var table = document.getElementsByTagName('table')[0];
+
+  if (table) {
+    table.addEventListener('click', function(e) {
+      if (e.target && e.target.nodeName == 'TD') {
+        console.log(stringToNumber(e.target.id));
+        window.open(getMapUrlById(stringToNumber(e.target.id) - 2), '_blank');
+      }
+    });
+  }
 }
 
 /* processing array buffers, only required for readAsArrayBuffer */
@@ -141,6 +174,7 @@ function process_wb(wb, name) {
   window.WORKBOOK = {
     name: name,
     wb: wb,
+    json: enrichedJson,
   };
   /* print as html */
   to_html(wb);
@@ -153,20 +187,7 @@ function handleFile(e) {
     f = files[i];
     var reader = new FileReader();
     var name = f.name;
-    reader.onload = function(e) {
-      var data = e.target.result;
-
-      var workbook;
-      if (rABS) {
-        /* if binary string, read with type 'binary' */
-        workbook = XLSX.read(data, { type: 'binary' });
-      } else {
-        /* if array buffer, convert to base64 */
-        var arr = fixdata(data);
-        workbook = XLSX.read(btoa(arr), { type: 'base64' });
-      }
-      process_wb(workbook, name);
-    };
+    var reader = getReaderForFile(f);
     reader.readAsBinaryString(f);
   }
 }
@@ -181,29 +202,28 @@ function handleDrop(e) {
   e.preventDefault();
   var files = e.dataTransfer.files;
   var f = files[0];
-  {
-    var reader = new FileReader();
-    var name = f.name;
-    reader.onload = function(e) {
-      if (typeof console !== 'undefined')
-        console.log('onload', new Date(), rABS, use_worker);
-      var data = e.target.result;
-      if (use_worker) {
-        xw(data, process_wb);
-      } else {
-        var wb;
-        if (rABS) {
-          wb = XLSX.read(data, { type: 'binary' });
-        } else {
-          var arr = fixdata(data);
-          wb = XLSX.read(btoa(arr), { type: 'base64' });
-        }
-        process_wb(wb, name);
-      }
-    };
-    if (rABS) reader.readAsBinaryString(f);
-    else reader.readAsArrayBuffer(f);
-  }
+  var reader = getReaderForFile(f);
+  if (rABS) reader.readAsBinaryString(f);
+  else reader.readAsArrayBuffer(f);
+}
+
+function getReaderForFile(file) {
+  var reader = new FileReader();
+  var name = file.name;
+  reader.onload = function(e) {
+    if (typeof console !== 'undefined')
+      console.log('onload', new Date(), rABS, use_worker);
+    var data = e.target.result;
+    var wb;
+    if (rABS) {
+      wb = XLSX.read(data, { type: 'binary' });
+    } else {
+      var arr = fixdata(data);
+      wb = XLSX.read(btoa(arr), { type: 'base64' });
+    }
+    process_wb(wb, name);
+  };
+  return reader;
 }
 
 function handleDragover(e) {
